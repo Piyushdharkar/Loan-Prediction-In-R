@@ -1,0 +1,230 @@
+```{r}
+#Import libraries
+library(mlr, warn.conflicts = FALSE)
+library(caret, warn.conflicts = FALSE)
+library(tidyr)
+library(purrr, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(magrittr, warn.conflicts = FALSE)
+library(ggplot2)
+
+source("scripts/Preprocess.R")
+source("scripts/Predict.R")
+```
+
+```{r}
+#Read csv file, remove Loan_ID column
+dataset = read.csv("data/dataset.csv") %>% select(-Loan_ID)
+```
+
+```{r}
+#Display first few rows of table
+head(dataset)
+```
+
+```{r}
+count <- table(dataset$Loan_Status)
+
+barplot(height = count, xlab = "LoanStatus")
+```
+
+```{r}
+#Oversampling
+dataset <- dataset %>% rbind(dataset[dataset['Loan_Status'] == 'N',])
+```
+
+```{r}
+#Display metadata
+str(dataset)
+```
+
+```{r}
+#Convert from int to factor
+dataset$Loan_Amount_Term <- as.factor(dataset$Loan_Amount_Term)
+```
+
+```{r}
+#Store names of continuous variables
+cont_var <- c('ApplicantIncome', 'CoapplicantIncome', 'LoanAmount')
+```
+
+```{r}
+#Display no of nas in all columns
+lapply(dataset, function(x) sum(is.na(x)))
+```
+
+```{r}
+#Display frequencies of all possible values
+table(dataset$Loan_Amount_Term)
+table(dataset$Credit_History)
+```
+
+```{r}
+#Remove na
+dataset$LoanAmount <- replace(dataset$LoanAmount, is.na(dataset$LoanAmount), values = mean(dataset$LoanAmount, na.rm = TRUE))
+
+dataset$Loan_Amount_Term[is.na(dataset$Loan_Amount_Term)] <- 360
+
+dataset$Credit_History[is.na(dataset$Credit_History)] <- 0
+```
+
+```{r}
+#Replace categorical variables by dummy values
+cont_var <- c('ApplicantIncome', 'CoapplicantIncome', 'LoanAmount')
+cat_var <- dataset %>% select(-cont_var, -Loan_Status) %>% colnames()
+
+categorical <- dataset[cat_var]
+continuous <- dataset %>% select(cont_var)
+  
+dmy <- dummyVars( ~ ., data = categorical)
+  
+new_categorical <- data.frame(predict(dmy, newdata = categorical)) %>% 
+  select(-Gender., -Married., -Dependents., -Self_Employed.)
+
+
+dummified_dataset <- cbind(continuous, new_categorical, dataset['Loan_Status'])
+
+dummified_dataset
+```
+
+```{r}
+#Preprocess data
+
+categorical <- dummified_dataset %>% select(-cont_var)
+continuous <- dummified_dataset %>% select(cont_var)
+
+preprocessor <- preProcess(x = continuous)
+
+new_dataset <- preprocessor %>% 
+  predict(continuous) %>% cbind(categorical)
+
+new_dataset <- dummified_dataset
+```
+
+```{r}
+#Plot correlation matrix
+cor(new_dataset[cont_var])
+```
+
+```{r}
+#Plot histograms of continuous variables
+dataset %>% select(cont_var, -LoanAmount) %>% gather() %>% ggplot(aes(value)) + 
+    facet_wrap(~ key) +
+    geom_histogram(bins = 50)
+
+dataset['LoanAmount'] %>% gather() %>% ggplot(aes(x = value)) + geom_histogram(bins = 30) + ggtitle("LoanAmount")
+```
+
+```{r}
+#Plot boxplots of continuous variables
+dataset %>% select(cont_var, -LoanAmount) %>% boxplot()
+boxplot(dataset['LoanAmount'], names = c("LoanAmount"))
+```
+
+```{r}
+#Plot barplots of categorical variables
+counts <- table(dataset$Loan_Status, dataset$Gender)
+barplot(counts, legend = rownames(counts), main = "Gender")
+
+counts <- table(dataset$Loan_Status, dataset$Married)
+barplot(counts, legend = rownames(counts), main = "Married")
+
+counts <- table(dataset$Loan_Status, dataset$Dependents)
+barplot(counts, legend = rownames(counts), main = "Dependents")
+
+counts <- table(dataset$Loan_Status, dataset$Education)
+barplot(counts, legend = rownames(counts), main = "Education")
+
+counts <- table(dataset$Loan_Status, dataset$Self_Employed)
+barplot(counts, legend = rownames(counts), main = "Self_Employed")
+
+counts <- table(dataset$Loan_Status, dataset$Loan_Amount_Term)
+barplot(counts, legend = rownames(counts), main = "Loan_Amount_Term")
+
+counts <- table(dataset$Loan_Status, dataset$Credit_History)
+barplot(counts, legend = rownames(counts), main = "Credit_History")
+
+counts <- table(dataset$Loan_Status, dataset$Property_Area)
+barplot(counts, legend = rownames(counts), main = "Property_Area")
+```
+
+```{r}
+#Split dataset into training and testing datasets
+train_indices <- createDataPartition(y = new_dataset$Loan_Status, p = 0.8, list = FALSE)
+
+training <- new_dataset[train_indices,]
+test <- new_dataset[-train_indices,]
+```
+
+```{r}
+#Initiate training controls 
+control <- trainControl(method = "cv", number = 10, p = 0.8, search = "grid")
+```
+
+```{r}
+#Train
+x_train <- training[,1:ncol(training) - 1]
+y_train <- training[,ncol(training)]
+  
+md <- caret::train(x = x_train, y = y_train, method = "cforest", trControl = control, metric = "Accuracy")
+
+md
+```
+
+```{r}
+#Test
+x_test <- test[,1:ncol(test) - 1]
+y_test <- test[,ncol(test)]
+
+y_pred <- predict(md, x_test)
+
+confusionMatrix(data = y_pred, reference = y_test, positive = "Y")
+```
+
+```{r}
+#Save model for future prediction
+saveRDS(object = md, file = "model.rds")
+```
+
+```{r}
+colnames(dataset[,1:ncol(dataset) - 1]) %>% saveRDS(file = "feature_list.rds") 
+```
+
+```{r}
+saveRDS(object = dataset[0:0, 1:ncol(dataset) - 1], file = "model/frame_format.rds")
+```
+
+```{r}
+colnames(dataset)
+```
+
+```{r}
+#Prediction example
+dummy_frame <- readRDS("frame_format.rds")
+
+dummy_frame[nrow(dummy_frame) + 1,] = dataset[8, 1:ncol(dataset) - 1]
+
+print(dataset[8, ncol(dataset)])
+
+ans <- predict_data(dummy_frame, preprocessor)
+
+ans
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
