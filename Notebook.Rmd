@@ -69,36 +69,17 @@ dataset$Credit_History[is.na(dataset$Credit_History)] <- 0
 ```
 
 ```{r}
-#Replace categorical variables by dummy values
-cont_var <- c('ApplicantIncome', 'CoapplicantIncome', 'LoanAmount')
-cat_var <- dataset %>% select(-cont_var, -Loan_Status) %>% colnames()
-
-categorical <- dataset[cat_var]
-continuous <- dataset %>% select(cont_var)
-  
-dmy <- dummyVars( ~ ., data = categorical)
-  
-new_categorical <- data.frame(predict(dmy, newdata = categorical)) %>% 
-  select(-Gender., -Married., -Dependents., -Self_Employed.)
-
-
-dummified_dataset <- cbind(continuous, new_categorical, dataset['Loan_Status'])
-
-dummified_dataset
-```
-
-```{r}
 #Preprocess data
 
-categorical <- dummified_dataset %>% select(-cont_var)
-continuous <- dummified_dataset %>% select(cont_var)
+categorical <- dataset %>% select(-cont_var)
+continuous <- dataset %>% select(cont_var)
 
 preprocessor <- preProcess(x = continuous)
 
 new_dataset <- preprocessor %>% 
   predict(continuous) %>% cbind(categorical)
 
-new_dataset <- dummified_dataset
+#new_dataset <- dataset
 ```
 
 ```{r}
@@ -166,7 +147,7 @@ control <- trainControl(method = "cv", number = 10, p = 0.8, search = "grid")
 x_train <- training[,1:ncol(training) - 1]
 y_train <- training[,ncol(training)]
   
-md <- caret::train(x = x_train, y = y_train, method = "cforest", trControl = control, metric = "Accuracy")
+md <- caret::train(x = x_train, y = y_train, method = "adaboost", trControl = control, metric = "Accuracy")
 
 md
 ```
@@ -210,6 +191,8 @@ ans <- predict_data(dummy_frame, preprocessor)
 
 ans
 ```
+
+
 
 
 
