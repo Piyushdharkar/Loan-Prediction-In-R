@@ -7,8 +7,8 @@ library(purrr, warn.conflicts = FALSE)
 library(dplyr, warn.conflicts = FALSE)
 library(magrittr, warn.conflicts = FALSE)
 library(ggplot2)
+library(mice, warn.conflicts = FALSE)
 
-source("scripts/Preprocess.R")
 source("scripts/Predict.R")
 ```
 
@@ -60,26 +60,29 @@ table(dataset$Credit_History)
 ```
 
 ```{r}
-#Remove na
-dataset$LoanAmount <- replace(dataset$LoanAmount, is.na(dataset$LoanAmount), values = mean(dataset$LoanAmount, na.rm = TRUE))
 
-dataset$Loan_Amount_Term[is.na(dataset$Loan_Amount_Term)] <- 360
+```
 
-dataset$Credit_History[is.na(dataset$Credit_History)] <- 0
+```{r}
+imputed_dataset <- complete(mice(data = dataset))
+
+imputed_dataset
+```
+
+```{r}
+imputed_dataset %>% lapply(function(val) sum(is.na(val)))
 ```
 
 ```{r}
 #Preprocess data
 
-categorical <- dataset %>% select(-cont_var)
-continuous <- dataset %>% select(cont_var)
+categorical <- imputed_dataset %>% select(-cont_var)
+continuous <- imputed_dataset %>% select(cont_var)
 
 preprocessor <- preProcess(x = continuous)
 
 new_dataset <- preprocessor %>% 
   predict(continuous) %>% cbind(categorical)
-
-#new_dataset <- dataset
 ```
 
 ```{r}
@@ -164,7 +167,7 @@ confusionMatrix(data = y_pred, reference = y_test, positive = "Y")
 
 ```{r}
 #Save model for future prediction
-saveRDS(object = md, file = "model.rds")
+saveRDS(object = md, file = "model/model.rds")
 ```
 
 ```{r}

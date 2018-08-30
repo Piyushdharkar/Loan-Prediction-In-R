@@ -17,5 +17,5 @@ predict_data = function(input_dataset, pp) {
   
   
   #Load model and predict
-  readRDS("model.rds") %>% predict(new_dataset)
+  readRDS("model/model.rds") %>% predict(new_dataset)
 }
